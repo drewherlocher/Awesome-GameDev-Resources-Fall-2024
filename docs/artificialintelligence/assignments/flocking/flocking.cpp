@@ -94,6 +94,15 @@ struct Boid {
   Vector2 velocity;
 };
 
+// Checks the boid index
+bool isValidBoidIndex(const vector<Boid>& boids, int boidAgentIndex) {
+  if (boidAgentIndex < 0 || boidAgentIndex>= boids.size()) {
+    cerr << "Error: boidAgentIndex out of range." << endl;
+    return true;
+  }
+  return false;
+}
+
 struct Cohesion {
   double radius;
   double k;
@@ -101,7 +110,34 @@ struct Cohesion {
   Cohesion() = default;
 
   Vector2 ComputeForce(const vector<Boid>& boids, int boidAgentIndex) {
-    return {};
+    double totalWeight = 0.0;
+    Vector2 cohesionForce = Vector2::zero;
+    Vector2 centerOfMass = Vector2::zero;
+    Vector2 averageCenterOfMass = Vector2::zero;
+
+    if (isValidBoidIndex(boids, boidAgentIndex)) {
+      return Vector2::zero;
+    }
+
+    // Go through the boids to calculate center of mass
+    for (const auto& boid : boids) {
+      double distance = Vector2::Distance(boids[boidAgentIndex].position, boid.position);
+      if (distance > 0 && distance < radius) {
+        double weight = 1 / distance;
+        centerOfMass += boid.position * weight;
+        totalWeight += weight;
+      }
+    }
+
+    // Calculate the center of mass if there are neighbors
+    if (totalWeight > 0) {
+      averageCenterOfMass = centerOfMass / totalWeight;
+      cohesionForce = averageCenterOfMass - boids[boidAgentIndex].position;
+      cohesionForce = cohesionForce.normalized() * k;
+      return cohesionForce;
+    }
+
+    return Vector2::zero;
   }
 };
 
@@ -112,7 +148,30 @@ struct Alignment {
   Alignment() = default;
 
   Vector2 ComputeForce(const vector<Boid>& boids, int boidAgentIndex) {
-    return {};
+    Vector2 totalVelocity = Vector2::zero;
+    Vector2 averageVelocity = Vector2::zero;
+    Vector2 alignmentForce = Vector2::zero;
+    int neighbors = 0;
+
+    if (isValidBoidIndex(boids, boidAgentIndex)) {
+      return Vector2::zero;
+    }
+
+    for (const auto& boid : boids) {
+      double distance = Vector2::Distance(boids[boidAgentIndex].position, boid.position);
+      if (distance > 0 && distance < radius) {
+        totalVelocity += boid.velocity;
+        neighbors++;
+      }
+    }
+
+    if (neighbors > 0) {
+      averageVelocity = totalVelocity / neighbors;
+      alignmentForce = averageVelocity - boids[boidAgentIndex].velocity;
+      alignmentForce = alignmentForce.normalized() * k;
+      return alignmentForce;
+    }
+    return Vector2::zero;
   }
 };
 
@@ -124,7 +183,30 @@ struct Separation {
   Separation() = default;
 
   Vector2 ComputeForce(const vector<Boid>& boids, int boidAgentIndex) {
-    return {};
+    Vector2 separationForce = Vector2::zero;
+    int neighbors = 0;
+    if (isValidBoidIndex(boids, boidAgentIndex)) {
+      return Vector2::zero;
+    }
+    for (const auto& boid : boids) {
+      if (&boid != &boids[boidAgentIndex]) {
+        double distance = Vector2::Distance(boids[boidAgentIndex].position, boid.position);
+        if (distance > 0 && distance < radius) {
+          Vector2 direction = boids[boidAgentIndex].position - boid.position;
+          separationForce += direction.normalized() / distance;
+          neighbors++;
+        }
+      }
+    }
+
+    if (neighbors > 0) {
+      separationForce = separationForce.normalized() * k;
+      if (separationForce.getMagnitude() > maxForce) {
+        separationForce = separationForce.normalized() * maxForce;
+      }
+      return separationForce;
+    }
+  return Vector2::zero;
   }
 };
 
@@ -147,13 +229,27 @@ int main() {
     currentState.push_back(b);
     newState.push_back(b);
   }
+ // cohesion.PrintDebug();
+
+  cin.ignore(numeric_limits<streamsize>::max(), '\n');
   // Final input reading and processing
   // todo: edit this. probably my code will be different than yours.
   while (getline(cin, line)) { // game loop
+    double deltaT;
+    try {
+      if (!line.empty()) {
+        deltaT = stod(line);  // Convert line to double
+      } else {
+        cerr << "Error: Empty line encountered while reading deltaT" << endl;
+        return 1;
+      }
+    } catch (const std::invalid_argument& e) {
+      cerr << "Error: " << e.what() << endl;
+      return 1;
+    }
+
     // Use double buffer! you should read from the current and store changes in the new state.
     currentState = newState;
-    double deltaT = stod(line);
-    // a vector of the sum of forces for each boid.
     vector<Vector2> allForces = vector<Vector2>(numberOfBoids, {0, 0});
     // Compute Forces
     for (int i = 0; i < numberOfBoids; i++)  // for every boid
